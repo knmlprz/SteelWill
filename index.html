@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Symulacja ratunkowa z wykorzystaniem dronów</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        *{box-sizing:border-box;}
+        body{margin:0;padding:0;font-family:Arial,sans-serif;overflow:hidden;background-color:#f0f4f8;}
+        #map-container{position:relative;width:100vw;height:100vh;}
+        #map{width:100%;height:100%;}
+        #fog-canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:400;pointer-events:none;opacity:0.6;}
+        .panel, .leaflet-popup {position:absolute;z-index:999999 !important;}
+        .panel{background:#ffffffdd;border-radius:12px;padding:14px 12px 12px 12px;box-shadow:0 2px 18px 2px rgba(0,0,0,0.24);backdrop-filter:blur(5px);}
+        #controls{left:10px;top:10px;width:320px;}
+        #info-panel{right:10px;top:10px;width:310px;max-height:85vh;overflow-y:auto;transition:right 0.4s cubic-bezier(.46,2,.46,.8), opacity 0.25s;}
+        .collapsible-panel.collapsed {
+            right: -272px !important; /* - szerokość panelu + kawałek na przycisk */
+            opacity: 0.88;
+        }
+        #collapse-btn {transition: left 0.3s;position:absolute;top:8px;left:-35px;width:30px;height:42px;z-index:1000001;border-radius:7px 0 0 7px;background:#e2e9f5;border:0;box-shadow:2px 0 12px 0 #234;}
+        .collapsible-panel.collapsed #collapse-btn {left: 5px;}
+        input[type="range"] {
+            width:100%;height:6px;border-radius:4px;background:#e0e7ef;margin:0 0 0 0;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            width:22px;height:22px;background:#0096ff;border-radius:50%;box-shadow:0 2px 8px #8ad1ff88;cursor:pointer;border:none;
+            -webkit-appearance:none;appearance:none;
+            transition:background 0.2s;
+        }
+        input[type="range"]:hover::-webkit-slider-thumb {background:#0065be;}
+        input[type="range"]:focus{outline:none;}
+        input[type="range"]::-moz-range-thumb {width:22px;height:22px;background:#0096ff;border-radius:50%;border:none;}
+        input[type="range"]::-ms-thumb {width:22px;height:22px;background:#0096ff;border-radius:50%;border:none;}
+        button{
+            all:unset;display:flex;align-items:center;gap:8px;justify-content:center;
+            background:#0096ff;color:#fff;padding:11px 0;border-radius:7px;cursor:pointer;
+            font-size:17px;font-weight:bold;
+            width:100%;
+            box-shadow:0 1px 5px #0096ff18;
+            transition:background 0.18s, box-shadow 0.2s;
+        }
+        button:hover{background:#0077cc;}
+        button:active {background:#0065be;}
+        button[disabled]{background:#aaa;}
+        #reset-btn{background:#f34545;}
+        #reset-btn:hover{background:#c62a2a;}
+        #reset-btn:active{background:#a92020;}
+        .progress-container{width:100%;background:#e3eaf0;border-radius:7px;height:18px;margin-top:17px;overflow:hidden;}
+        .progress-bar{width:0%;height:100%;background:#27ae60;transition:width .3s;}
+        .drone-icon{background:url('https://cdn-icons-png.flaticon.com/512/7879/7879661.png') center/contain no-repeat;width:60px;height:60px;filter:drop-shadow(0 0 10px #0096ff);}
+        .event-label{color:#222;font-size:15px;font-weight:bold;text-shadow:0 1px 10px #fff;}
+        .legend{position:absolute;bottom:10px;right:10px;z-index:10001;background:#ffffffdd;padding:9px 15px 9px 11px;border-radius:7px;box-shadow:0 2px 8px rgba(0,0,0,0.16);font-size:15px;backdrop-filter:blur(6px);}
+        /* Incydenty */
+        .incident-card{
+            display:flex;align-items:flex-start;gap:13px;
+            background:#f7fbfc;border-radius:9px;padding:12px 10px;margin-bottom:13px;
+            box-shadow:0 2px 10px rgba(44,126,191,0.07);
+            border-left:5px solid #e74c3c;position:relative;
+            opacity:0;transform:translateY(30px) scale(0.95);
+            animation:incidentIn .55s cubic-bezier(.37,1.44,.41,1) forwards;
+            z-index:20001;
+        }
+        @keyframes incidentIn {
+            to{opacity:1;transform:translateY(0) scale(1);}
+        }
+        .incident-icon{
+            width:30px;height:30px;border-radius:50%;background:#e74c3c;display:flex;align-items:center;justify-content:center;
+            box-shadow:0 0 8px 0 #d54;
+            color:#fff;font-size:19px;
+            flex-shrink:0;
+        }
+        .incident-info{font-size:15px;line-height:1.36;}
+        .incident-coord{font-size:12px;color:#888;margin-top:3px;}
+        .incident-divider{
+            height:1px;width:95%;margin:7px auto 2px auto;background:linear-gradient(to right,#e5e9f0, #c9e1f7 70%);border:0;
+        }
+        /* Popup nad wszystkim */
+        .leaflet-popup {z-index: 999999 !important;}
+        .leaflet-popup-content-wrapper {
+          z-index: 999999 !important;
+            background: #fff !important;
+            color: #222 !important;
+            border-radius: 13px !important;
+            box-shadow: 0 8px 48px 0 #2226 !important;
+            padding: 10px 15px !important;
+            border: 2px solid #e74c3c !important;
+        }
+        .leaflet-popup-tip {display: none !important;}
+        .leaflet-popup-content {
+            color: #222 !important;
+            font-size: 18px !important;
+            text-align: center;
+            padding: 4px 2px;
+            font-weight: bold;
+            letter-spacing: 0.01em;
+            text-shadow: 0 2px 5px #fff7, 0 0 2px #e74c3c44;
+        }
+        .person-incident-marker{
+            width:40px;height:40px;border-radius:50%;
+            background:#e74c3c;display:flex;align-items:center;justify-content:center;
+            box-shadow:0 2px 16px 0 #c44b;
+            color:#fff;font-size:22px;border:3px solid #fff;
+            transition:box-shadow 0.2s;
+            z-index:20010;
+            opacity:0;
+            transform:scale(0.5) translateY(-15px);
+            animation: pop-in-incident .45s cubic-bezier(.45,2,.45,.95) forwards;
+        }
+        @keyframes pop-in-incident {
+            0% {opacity:0;transform:scale(0.4) translateY(-18px);z-index:20011;}
+            60%{opacity:1;transform:scale(1.14) translateY(2px);z-index:20011;}
+            85%{transform:scale(0.94) translateY(0);z-index:20011;}
+            100%{opacity:1;transform:scale(1) translateY(0);z-index:20011;}
+        }
+        .person-incident-marker:hover{
+            box-shadow:0 2px 24px 4px #e74c3c66;
+        }
+    </style>
+</head>
+<body>
+    <div id="map-container">
+        <div id="map"></div>
+        <canvas id="fog-canvas"></canvas>
+        <div class="legend">
+            <strong>Legenda</strong><br>
+            <i class="fas fa-map-marker-alt" style="color:#3498db;"></i> Punkt startowy/końcowy<br>
+            <i class="fas fa-drone" style="color:#007bff;"></i> Dron<br>
+            <i class="fas fa-user-injured" style="color:#e74c3c;"></i> Osoba potrzebująca
+        </div>
+    </div>
+
+    <div id="controls" class="panel">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+            <i class="fas fa-drone" style="color:#0096ff;font-size:25px;"></i>
+            <h2 style="font-size:21px;letter-spacing:0.01em;margin:0;">Sterowanie misją</h2>
+        </div>
+        <hr style="border:0;height:1.5px;background:linear-gradient(to right,#cfe5fc,#fff,#e0e7ef);margin:10px 0 12px 0;">
+        <div style="font-weight:bold;color:#2a4257;margin-bottom:5px;font-size:16px;">Liczba dronów:</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <input type="range" id="drone-count" value="3" min="1" max="10" style="flex:1 1 80%; accent-color:#0096ff;">
+            <span id="drone-count-num" style="font-size:19px;font-weight:bold;min-width:28px;text-align:center;display:flex;align-items:center;gap:4px;">
+                <i class="fas fa-drone" style="color:#0096ff;"></i>
+                <span id="drone-count-label">3</span>
+            </span>
+        </div>
+        <div class="progress-container"><div id="progress-bar" class="progress-bar"></div></div>
+        <div style="margin:7px 0 11px 0;text-align:center;font-size:15px;">Postęp misji: <span id="progress-text">0</span>%</div>
+        <div style="display:flex;gap:10px;">
+            <button id="start-btn" style="flex:1 1 0;background:#0096ff;"><i class="fas fa-play"></i>Start</button>
+            <button id="reset-btn" style="flex:1 1 0;background:#f34545;" disabled><i class="fas fa-redo"></i>Reset</button>
+        </div>
+        <div id="mission-status" style="margin-top:14px;text-align:center;color:#888;font-size:14px;"></div>
+    </div>
+
+    <!-- Panel incydentów z przyciskiem zwijania -->
+    <div id="info-panel" class="panel collapsible-panel">
+        <button id="collapse-btn" title="Zwiń panel">
+            <i id="collapse-icon" class="fas fa-chevron-right" style="color:#007bff;font-size:21px;"></i>
+        </button>
+        <h3 style="margin-top:0;"><i class="fas fa-user-injured"></i> Wykryte osoby</h3>
+        <div id="events-list">Brak zdarzeń</div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const SCAN_RADIUS_M=150,DRONE_SPEED=0.0002;
+        const EVENTS=['Człowiek leżący','Osoba wymachująca rękami','Zakrwawiona osoba','Osoba krzycząca o pomoc','Człowiek idący powoli'];
+        const map=L.map('map').setView([50.0614,19.9372],13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy;OpenStreetMap'}).addTo(map);
+
+        const fogCanvas=document.getElementById('fog-canvas'),ctx=fogCanvas.getContext('2d');
+        function resizeCanvas(){fogCanvas.width=map.getSize().x;fogCanvas.height=map.getSize().y;}
+        resizeCanvas();window.addEventListener('resize',resizeCanvas);
+
+        function clearFog(){
+            ctx.globalCompositeOperation='source-over';
+            ctx.fillStyle='rgba(0,0,0,0.6)';
+            ctx.fillRect(0,0,fogCanvas.width,fogCanvas.height);
+        }
+        clearFog();
+
+        function revealArea(latlng){
+            const p=map.latLngToContainerPoint(latlng),r=SCAN_RADIUS_M/map.distance(latlng,map.containerPointToLatLng([p.x+1,p.y]));
+            ctx.globalCompositeOperation='destination-out';ctx.beginPath();ctx.arc(p.x,p.y,r,0,2*Math.PI);ctx.fill();
+            ctx.globalCompositeOperation='source-over';
+        }
+
+        const drones=[],events=[];
+        let startPoint,endPoint,routeLine,animationId,progress;
+
+        function createEvents(){
+            events.length=0;
+            for(let i=0;i<30;i++){
+                events.push({
+                    pos:L.latLng(startPoint.lat+(endPoint.lat-startPoint.lat)*Math.random(),startPoint.lng+(endPoint.lng-startPoint.lng)*Math.random()),
+                    type:EVENTS[Math.floor(Math.random()*EVENTS.length)],
+                    found:false,
+                    marker:null
+                });
+            }
+        }
+
+        function animate(){
+            progress=Math.min(1,progress+DRONE_SPEED);
+
+            drones.forEach((d,i)=>{
+                const offset=(i-(drones.length-1)/2)*0.005;
+                const lat=startPoint.lat+(endPoint.lat-startPoint.lat)*progress+offset;
+                const lng=startPoint.lng+(endPoint.lng-startPoint.lng)*progress;
+                d.setLatLng([lat,lng]);revealArea([lat,lng]);
+
+                events.forEach(e=>{
+                    if(!e.found&&d.getLatLng().distanceTo(e.pos)<SCAN_RADIUS_M){
+                        e.found=true;
+                        // Custom marker osoby – jak w panelu po prawej (ikona + animacja)
+                        const html = `<div class="person-incident-marker"><i class="fas fa-user-injured"></i></div>`;
+                        const personMarker = L.marker(e.pos, {
+                            icon: L.divIcon({
+                                className: '',
+                                html: html,
+                                iconSize: [40,40],
+                                iconAnchor: [20,20],
+                                popupAnchor: [0, -30]
+                            }),
+                            zIndexOffset: 299999 // Na pewno ponad mgłą!
+                        }).addTo(map);
+                        e.marker=personMarker;
+
+                        personMarker.on('click',function(){
+                            if (personMarker._popup) personMarker.closePopup();
+                            personMarker.bindPopup(
+                                `<div style="z-index: 999999 !important;font-size:16px;font-weight:bold;padding:6px 12px;text-align:center;">
+                                ${e.type}<br><span style="font-size:12px;color:#888">${e.pos.lat.toFixed(5)}, ${e.pos.lng.toFixed(5)}</span>
+                                </div>`,
+                                {offset: [0, -38], closeButton: true, autoPan: true, className: 'event-label', autoClose: true}
+                            ).openPopup();
+                        });
+                        updateEventsList();
+                    }
+                });
+            });
+
+            document.getElementById('progress-bar').style.width=`${progress*100}%`;
+            document.getElementById('progress-text').textContent=Math.round(progress*100);
+            if(progress<1){animationId=requestAnimationFrame(animate);}else{stopSimulation();}
+        }
+
+        function updateEventsList(){
+            const found=events.filter(e=>e.found);
+            const container=document.getElementById('events-list');
+            if(!found.length){container.innerHTML='Brak zdarzeń';return;}
+            container.innerHTML='';
+            found.forEach((e,i)=>{
+                const div=document.createElement('div');
+                div.className='incident-card';
+                div.innerHTML=`
+                    <div class="incident-icon"><i class="fas fa-user-injured"></i></div>
+                    <div>
+                        <div class="incident-info">${e.type}</div>
+                        <div class="incident-coord">${e.pos.lat.toFixed(5)}, ${e.pos.lng.toFixed(5)}</div>
+                    </div>
+                `;
+                container.appendChild(div);
+                // Divider poza ostatnim
+                if(i<found.length-1){
+                    const hr=document.createElement('hr');
+                    hr.className='incident-divider';
+                    container.appendChild(hr);
+                }
+            });
+        }
+
+        function startSimulation(){
+            if(!startPoint||!endPoint)return;
+            document.getElementById('start-btn').disabled=true;
+            document.getElementById('reset-btn').disabled=false;
+            document.getElementById('mission-status').textContent = 'Patrol trwa…';
+            progress=0; clearFog(); createEvents(); updateEventsList();
+
+            drones.forEach(d=>map.removeLayer(d)); drones.length=0;
+            if(routeLine) map.removeLayer(routeLine);
+
+            // Rysowanie wyraźnej linii trasy
+            routeLine=L.polyline([startPoint,endPoint],{color:'#3498db',weight:6,opacity:0.35}).addTo(map);
+
+            const droneCount=Math.max(1,Math.min(10,parseInt(document.getElementById('drone-count').value)));
+            for(let i=0;i<droneCount;i++){
+                const d=L.marker(startPoint,{
+                    icon:L.divIcon({className:'drone-icon'})
+                }).addTo(map); drones.push(d);
+            }
+            animate();
+        }
+
+        function stopSimulation(){
+            cancelAnimationFrame(animationId);
+            document.getElementById('start-btn').disabled=false;
+            document.getElementById('mission-status').textContent = 'Misja zakończona!';
+        }
+        function resetSimulation(){
+            stopSimulation();
+            drones.forEach(d=>map.removeLayer(d));
+            events.forEach(e=>{if(e.marker)map.removeLayer(e.marker);});
+            drones.length=0; events.length=0;
+            if(routeLine) map.removeLayer(routeLine);
+            startPoint=endPoint=routeLine=null;
+            map.eachLayer(layer=>{
+                if(layer instanceof L.Marker||layer instanceof L.Polyline)
+                    map.removeLayer(layer);
+            });
+            clearFog(); document.getElementById('events-list').innerHTML='Brak zdarzeń';
+            document.getElementById('progress-bar').style.width='0%';
+            document.getElementById('progress-text').textContent='0';
+            document.getElementById('start-btn').disabled=false;
+            document.getElementById('reset-btn').disabled=true;
+            document.getElementById('mission-status').textContent = '';
+        }
+
+        map.on('click',e=>{
+            if(!startPoint){
+                startPoint=e.latlng;
+                L.marker(e.latlng).addTo(map).bindPopup('Start').openPopup();
+                document.getElementById('mission-status').textContent = "Ustaw punkt końcowy…";
+            }else if(!endPoint){
+                endPoint=e.latlng;
+                L.marker(e.latlng).addTo(map).bindPopup('Koniec').openPopup();
+                routeLine=L.polyline([startPoint,endPoint],{color:'#3498db',dashArray:'5,5',weight:3,opacity:0.6}).addTo(map);
+                document.getElementById('mission-status').textContent = "Gotowe do startu!";
+            }
+        });
+
+        document.getElementById('start-btn').onclick=startSimulation;
+        document.getElementById('reset-btn').onclick=resetSimulation;
+
+        // Slider z aktualizacją ikony
+        const droneSlider = document.getElementById('drone-count');
+        const droneCountLabel = document.getElementById('drone-count-label');
+        droneSlider.oninput = function() {
+            droneCountLabel.textContent = this.value;
+        };
+
+        // Animacja paneli na starcie
+        document.querySelectorAll('.panel').forEach(panel => {
+            panel.style.zIndex = 999999; // MAX
+            panel.style.transform = 'translateY(-10px)';
+            panel.style.opacity = '0';
+            setTimeout(() => {
+                panel.style.transition = 'transform 0.5s cubic-bezier(.45,2,.45,.95), opacity 0.5s cubic-bezier(.45,2,.45,.95)';
+                panel.style.transform = 'translateY(0)';
+                panel.style.opacity = '1';
+            }, 200);
+        });
+
+        // --- ZWIJANY PANEL PO PRAWEJ ---
+        const infoPanel = document.getElementById('info-panel');
+        const collapseBtn = document.getElementById('collapse-btn');
+        const collapseIcon = document.getElementById('collapse-icon');
+        let panelCollapsed = false;
+        collapseBtn.onclick = function() {
+            panelCollapsed = !panelCollapsed;
+            if(panelCollapsed){
+                infoPanel.classList.add('collapsed');
+                collapseIcon.classList.remove('fa-chevron-right');
+                collapseIcon.classList.add('fa-chevron-left');
+                collapseBtn.title = "Rozwiń panel";
+            }else{
+                infoPanel.classList.remove('collapsed');
+                collapseIcon.classList.remove('fa-chevron-left');
+                collapseIcon.classList.add('fa-chevron-right');
+                collapseBtn.title = "Zwiń panel";
+            }
+        };
+    </script>
+</body>
+</html>
