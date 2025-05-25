@@ -24,6 +24,7 @@ tqdm = "^4.67.1"
 ultralytics = "^8.3.144"
 pandas = "^2.2.3"
 seaborn = "^0.13.2"
+streamlit-autorefresh = "^1.0.1"
 
 
 [build-system]

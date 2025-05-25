@@ -12,7 +12,7 @@ from folium import Marker, Popup
 
 # Page configuration
 st.set_page_config(layout="wide")
-st.title("🔥 Fire Hazard Monitoring System")
+st.title("Steel Will")
 
 # Cache YOLOv5 model to avoid reloading every time
 @st.cache_resource
@@ -22,11 +22,11 @@ def load_model():
 model = load_model()
 
 # Application tabs
-tabs = st.tabs(["🧠 AI Smoke Detection", "🗺️ Fire Hazard Map Dashboard"])
+tabs = st.tabs(["🧠 Drone camera preview", "🗺️ Hazard Map Dashboard"])
 
 # ========== TAB 1: Image Detection ==========
 with tabs[0]:
-    st.header("YOLOv5 Smoke/Wildfire Detection from Drone Imagery")
+    st.header("YOLOv5 Threat Detection from Drone Imagery")
     uploaded_file = st.file_uploader("Upload an image for analysis", type=['jpg', 'jpeg', 'png'])
 
     if uploaded_file is not None:
@@ -41,13 +41,13 @@ with tabs[0]:
 
 # ========== TAB 2: Map Dashboard ==========
 with tabs[1]:
-    st.header("Fire Hazard Risk Map – Subcarpathian Voivodeship")
+    st.header("Hazard Risk Map – Subcarpathian Voivodeship")
 
     lat_min, lat_max = 49.0, 50.5
     lon_min, lon_max = 21.0, 23.5
 
-    risk_threshold = st.sidebar.slider("Minimum Fire Risk to Display (%)", 0, 100, 0, 5)
-    if st.sidebar.button("🔁 Regenerate Fire Risk Points"):
+    risk_threshold = st.sidebar.slider("Minimum Hazard Risk to Display (%)", 0, 100, 0, 5)
+    if st.sidebar.button("🔁 Regenerate Hazard Risk Points"):
         st.session_state.random_points = None
         st.session_state.display_index = 0
 
@@ -113,7 +113,7 @@ with tabs[1]:
 
     legend_html = """
     <div style='position: fixed; bottom: 50px; left: 50px; width: 170px; height: 120px; background-color: white; z-index:9999; border:2px solid grey; padding: 10px; font-size: 14px;'>
-        <b>🔥 Fire Risk Levels</b><br>
+        <b>Hazard Risk Levels</b><br>
         <i style='color:green;'>●</i> Low (<25%)<br>
         <i style='color:orange;'>●</i> Moderate (25–60%)<br>
         <i style='color:red;'>●</i> High (>60%)<br>
